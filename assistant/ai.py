@@ -1,17 +1,19 @@
 import requests
-import re
+import time
 
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 
-SYSTEM_PROMPT = """
-Ты голосовой ассистент.
-Отвечай всегда только на русском языке.
-Кратко и по делу.
-"""
+last_call = 0
+
+def rate_limit():
+    global last_call
+    now = time.time()
+    if now - last_call < 2:
+        time.sleep(2 - (now - last_call))
+    last_call = time.time()
 
 def ask_ai(user_text):
-    if not OPENROUTER_API_KEY:
-        return "AI не настроен."
+    rate_limit()
 
     try:
         response = requests.post(
@@ -23,15 +25,18 @@ def ask_ai(user_text):
                 "X-Title": "Voice Assistant"
             },
             json={
-                "model": "deepseek/deepseek-chat",
+                "model": "openai/gpt-3.5-turbo",
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": "Отвечай на русском языке."},
                     {"role": "user", "content": user_text}
-                ],
-                "temperature": 0.3
+                ]
             },
             timeout=10
         )
+
+        if response.status_code != 200:
+            print("HTTP ERROR:", response.status_code, response.text)
+            return "Сервис временно недоступен."
 
         data = response.json()
         print("AI RAW:", data)
@@ -39,16 +44,7 @@ def ask_ai(user_text):
         if "error" in data:
             return "AI временно недоступен."
 
-        if "choices" not in data:
-            return "Нет ответа от AI."
-
-        text = data["choices"][0]["message"]["content"].strip()
-
-        # фильтр английского
-        if re.search(r'[a-zA-Z]{4,}', text):
-            return "Пожалуйста, повторите запрос."
-
-        return text
+        return data["choices"][0]["message"]["content"]
 
     except Exception as e:
         print("AI ERROR:", e)
