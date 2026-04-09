@@ -1,7 +1,7 @@
 import requests
 import re
 
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 
 SYSTEM_PROMPT = """
 Ты голосовой ассистент.
