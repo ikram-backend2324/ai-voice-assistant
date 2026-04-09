@@ -1,0 +1,12 @@
+# env files
+.env
+
+# python
+__pycache__/
+*.pyc
+
+# django
+db.sqlite3
+
+# system
+.DS_Store

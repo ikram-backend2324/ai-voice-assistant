@@ -1,7 +1,11 @@
 import requests
 import time
 
-OPENROUTER_API_KEY = "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"
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 last_call = 0
 
