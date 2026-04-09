@@ -1,7 +1,7 @@
 import requests
 import os
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = "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"
 
 SYSTEM_PROMPT = """
 Ты голосовой ассистент.

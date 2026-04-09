@@ -34,7 +34,7 @@ MONTHS = [
 ]
 
 def get_weather(city="Tashkent"):
-    key = os.getenv("WEATHER_API_KEY")
+    key = "2d1c493ec6de6f656d67745b7aff5036"
     if not key:
         return "Ключ погоды не настроен."
 
