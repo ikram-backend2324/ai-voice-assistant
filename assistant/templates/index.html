@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Voice Assistant</title>
+
+<style>
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.9); opacity: 0; }
+  }
+  @keyframes wave {
+    0%, 100% { height: 6px; }
+    50% { height: 28px; }
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  .va-wrap {
+    min-height: 600px;
+    background: #0f0f1a;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 20px 24px;
+    font-family: var(--font-sans, 'Segoe UI', sans-serif);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .va-wrap::before {
+    content: '';
+    position: absolute;
+    top: -80px; left: 50%;
+    transform: translateX(-50%);
+    width: 320px; height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(100,80,220,0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .va-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.5px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .va-title-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #7f77dd;
+  }
+
+  .va-chat {
+    width: 100%;
+    max-width: 520px;
+    flex: 1;
+    min-height: 220px;
+    max-height: 240px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(127,119,221,0.3) transparent;
+  }
+
+  .va-chat::-webkit-scrollbar { width: 4px; }
+  .va-chat::-webkit-scrollbar-thumb { background: rgba(127,119,221,0.3); border-radius: 4px; }
+
+  .va-msg {
+    max-width: 78%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.5;
+    animation: fadeSlideIn 0.25s ease both;
+  }
+
+  .va-msg.user {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #534ab7, #7f77dd);
+    color: #eeedfe;
+    border-bottom-right-radius: 4px;
+  }
+
+  .va-msg.bot {
+    align-self: flex-start;
+    background: rgba(255,255,255,0.07);
+    color: rgba(255,255,255,0.85);
+    border: 0.5px solid rgba(255,255,255,0.1);
+    border-bottom-left-radius: 4px;
+  }
+
+  .va-msg.bot.typing {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    padding: 12px 16px;
+  }
+
+  .va-msg.bot.typing span {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    animation: wave 1s ease-in-out infinite;
+  }
+  .va-msg.bot.typing span:nth-child(2) { animation-delay: 0.15s; }
+  .va-msg.bot.typing span:nth-child(3) { animation-delay: 0.3s; }
+
+  .va-orb-area {
+    margin: 28px 0 16px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 130px; height: 130px;
+  }
+
+  .va-ring {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(127,119,221,0.25);
+    pointer-events: none;
+  }
+  .va-ring-1 { width: 130px; height: 130px; }
+  .va-ring-2 { width: 130px; height: 130px; }
+
+  .va-orb-area.listening .va-ring-1 {
+    animation: pulse-ring 1.4s ease-out infinite;
+  }
+  .va-orb-area.listening .va-ring-2 {
+    animation: pulse-ring 1.4s ease-out 0.5s infinite;
+  }
+
+  .va-mic-btn {
+    position: relative;
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(145deg, #534ab7, #7f77dd);
+    color: white;
+    font-size: 26px;
+    cursor: pointer;
+    z-index: 2;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 20px rgba(83,74,183,0.5);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .va-mic-btn:hover { transform: scale(1.06); }
+  .va-mic-btn:active { transform: scale(0.96); }
+  .va-mic-btn.active {
+    background: linear-gradient(145deg, #0f6e56, #1d9e75);
+    box-shadow: 0 4px 20px rgba(29,158,117,0.5);
+  }
+
+  .va-waves {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 36px;
+    margin-bottom: 6px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .va-waves.visible { opacity: 1; }
+  .va-waves .bar {
+    width: 4px;
+    height: 6px;
+    background: #7f77dd;
+    border-radius: 2px;
+  }
+  .va-orb-area.listening ~ .va-waves .bar {
+    animation: wave 0.8s ease-in-out infinite;
+  }
+  .va-orb-area.listening ~ .va-waves {
+    opacity: 1;
+  }
+  .va-waves .bar:nth-child(1) { animation-delay: 0s; }
+  .va-waves .bar:nth-child(2) { animation-delay: 0.1s; }
+  .va-waves .bar:nth-child(3) { animation-delay: 0.2s; }
+  .va-waves .bar:nth-child(4) { animation-delay: 0.05s; }
+  .va-waves .bar:nth-child(5) { animation-delay: 0.15s; }
+  .va-waves .bar:nth-child(6) { animation-delay: 0.25s; }
+  .va-waves .bar:nth-child(7) { animation-delay: 0.08s; }
+
+  .va-status {
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 16px;
+    letter-spacing: 0.3px;
+    min-height: 18px;
+  }
+
+  .va-controls {
+    display: flex;
+    gap: 8px;
+  }
+
+  .va-ctrl-btn {
+    padding: 7px 16px;
+    border-radius: 20px;
+    border: 0.5px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.6);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .va-ctrl-btn:hover {
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.9);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  .va-ctrl-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+</style>
+
+</head>
+<body>
+
+<div class="va-wrap" id="va">
+  <div class="va-title">
+    <div class="va-title-dot"></div>
+    Voice Assistant
+  </div>
+
+  <div class="va-chat" id="chat">
+    <div class="va-msg bot">Привет! Нажмите кнопку и скажите что-нибудь.</div>
+  </div>
+
+  <div class="va-orb-area" id="orbArea">
+    <div class="va-ring va-ring-1"></div>
+    <div class="va-ring va-ring-2"></div>
+    <button class="va-mic-btn" id="micBtn" title="Начать запись">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+        <rect x="9" y="2" width="6" height="12" rx="3"/>
+        <path d="M5 10a7 7 0 0 0 14 0"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+        <line x1="9" y1="22" x2="15" y2="22"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="va-waves" id="waves">
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div>
+  </div>
+
+  <div class="va-status" id="status">Нажмите кнопку и говорите</div>
+
+  <div class="va-controls">
+    <button class="va-ctrl-btn" onclick="stopSpeech()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+      Стоп
+    </button>
+    <button class="va-ctrl-btn" onclick="pauseSpeech()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>
+      Пауза
+    </button>
+    <button class="va-ctrl-btn" onclick="resumeSpeech()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+      Продолжить
+    </button>
+  </div>
+</div>
+<script>
+const micBtn = document.getElementById("micBtn");
+const orbArea = document.getElementById("orbArea");
+const statusText = document.getElementById("status");
+const chat = document.getElementById("chat");
+const wavesEl = document.getElementById("waves");
+
+let recognition = null;
+let isListening = false;
+let speechVolume = 1.0;
+
+function addMessage(text, sender) {
+  const div = document.createElement("div");
+  div.className = "va-msg " + sender;
+  div.innerText = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function showTyping() {
+  const div = document.createElement("div");
+  div.className = "va-msg bot typing";
+  div.id = "typing-indicator";
+  div.innerHTML = "<span></span><span></span><span></span>";
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById("typing-indicator");
+  if (t) t.remove();
+}
+
+function speak(text) {
+    speechSynthesis.cancel();
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang   = "ru-RU";
+    u.rate   = 1.0;
+    u.pitch  = 1.0;
+    u.volume = speechVolume;
+
+    // Pick best available Russian voice
+    const voices = speechSynthesis.getVoices();
+    const ruVoice = voices.find(v =>
+        v.lang.startsWith("ru") && v.localService
+    ) || voices.find(v => v.lang.startsWith("ru"));
+    if (ruVoice) u.voice = ruVoice;
+
+    speechSynthesis.speak(u);
+}
+
+function stopSpeech() {
+  speechSynthesis.cancel();
+  statusText.innerText = "Остановлено";
+}
+
+function pauseSpeech() { speechSynthesis.pause(); }
+function resumeSpeech() { speechSynthesis.resume(); }
+
+function sendToServer(text) {
+    showTyping();   // show "..." bubble while waiting
+
+    fetch(`/process/?text=${encodeURIComponent(text)}`)
+        .then(r => r.json())
+        .then(data => {
+            removeTyping();
+            addMessage(data.response, "bot");
+            speak(data.response);
+
+            // ── handle actions ──────────────────────────────────
+            switch (data.action) {
+                case "open_url":
+                    window.open(data.url, "_blank");
+                    break;
+
+                case "open_google":   // keep old action working
+                    window.open("https://google.com", "_blank");
+                    break;
+
+                case "volume_up":
+                    speechVolume = Math.min(1.0, speechVolume + 0.2);
+                    break;
+
+                case "volume_down":
+                    speechVolume = Math.max(0.1, speechVolume - 0.2);
+                    break;
+
+                case "mute":
+                    speechVolume = 0.0;
+                    speechSynthesis.cancel();
+                    break;
+            }
+        })
+        .catch(() => {
+            removeTyping();
+            addMessage("Ошибка соединения с сервером.", "bot");
+        });
+}
+
+function startListening() {
+  if (isListening) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { statusText.innerText = "Браузер не поддерживает распознавание"; return; }
+  recognition = new SR();
+  recognition.lang = "ru-RU";
+  isListening = true;
+  micBtn.classList.add("active");
+  orbArea.classList.add("listening");
+  wavesEl.classList.add("visible");
+  statusText.innerText = "Слушаю...";
+  recognition.start();
+
+  recognition.onresult = e => {
+    const text = e.results[0][0].transcript;
+    addMessage(text, "user");
+    sendToServer(text);
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    micBtn.classList.remove("active");
+    orbArea.classList.remove("listening");
+    wavesEl.classList.remove("visible");
+    statusText.innerText = "Нажмите кнопку и говорите";
+  };
+
+  recognition.onerror = () => {
+    isListening = false;
+    micBtn.classList.remove("active");
+    orbArea.classList.remove("listening");
+    wavesEl.classList.remove("visible");
+    statusText.innerText = "Ошибка распознавания";
+  };
+}
+
+micBtn.addEventListener("click", () => {
+  speechSynthesis.cancel();
+  startListening();
+});
+speechSynthesis.onvoiceschanged = () => { speechSynthesis.getVoices(); };
+</script>
+
+</body>
+</html>
