@@ -138,3 +138,6 @@ def process_command(request):
     else:
         ai_response = ask_ai(text)
         return JsonResponse({"response": ai_response})
+
+print("WEATHER:", os.getenv("WEATHER_API_KEY"))
+print("AI:", os.getenv("OPENROUTER_API_KEY"))
