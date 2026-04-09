@@ -1,7 +1,7 @@
 import requests
 import time
 
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 
 last_call = 0
 
