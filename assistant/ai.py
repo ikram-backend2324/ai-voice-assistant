@@ -1,14 +1,12 @@
 import requests
-import os
+import re
 
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 
 SYSTEM_PROMPT = """
 Ты голосовой ассистент.
-Отвечай ВСЕГДА только на русском языке.
-Никогда не используй английский.
-Отвечай кратко, понятно и по делу.
-Без markdown, без списков, без форматирования.
+Отвечай всегда только на русском языке.
+Кратко и по делу.
 """
 
 def ask_ai(user_text):
@@ -20,10 +18,12 @@ def ask_ai(user_text):
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://ai-voice-assistant-psjj.onrender.com",
+                "X-Title": "Voice Assistant"
             },
             json={
-                "model": "openai/gpt-4o-mini",
+                "model": "deepseek/deepseek-chat",
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_text}
@@ -34,11 +34,18 @@ def ask_ai(user_text):
         )
 
         data = response.json()
+        print("AI RAW:", data)
+
+        if "error" in data:
+            return "AI временно недоступен."
+
+        if "choices" not in data:
+            return "Нет ответа от AI."
 
         text = data["choices"][0]["message"]["content"].strip()
 
-        # 💥 ЖЁСТКИЙ ФИЛЬТР ОТ АНГЛИЙСКОГО
-        if any(word in text.lower() for word in ["the", "and", "is", "are", "you"]):
+        # фильтр английского
+        if re.search(r'[a-zA-Z]{4,}', text):
             return "Пожалуйста, повторите запрос."
 
         return text
