@@ -1,15 +1,17 @@
 # assistant/views.py
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime
 import requests
+import io
 
 from .ai import ask_ai
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
+
 # ── helpers ────────────────────────────────────────────────
 
 SITES = {
@@ -38,30 +40,19 @@ def get_weather(city="Tashkent"):
     key = "2d1c493ec6de6f656d67745b7aff5036"
     if not key:
         return "Ключ погоды не настроен."
-
     try:
         r = requests.get(
             "https://api.openweathermap.org/data/2.5/weather",
-            params={
-                "q": city,
-                "appid": key,
-                "units": "metric",
-                "lang": "ru"
-            },
+            params={"q": city, "appid": key, "units": "metric", "lang": "ru"},
             timeout=5
         )
-
         data = r.json()
-
         if data.get("cod") != 200:
             return f"Не нашёл город {city}."
-
         desc  = data["weather"][0]["description"]
         temp  = round(data["main"]["temp"])
         feels = round(data["main"]["feels_like"])
-
         return f"В {city}: {desc}, {temp}°C, ощущается как {feels}°C."
-
     except Exception as e:
         print("WEATHER ERROR:", e)
         return "Ошибка получения погоды."
@@ -72,10 +63,25 @@ def index(request):
     return render(request, 'index.html')
 
 @csrf_exempt
+def tts(request):
+    """Generate Russian TTS audio using gTTS and return it as MP3."""
+    text = request.GET.get('text', '').strip()
+    if not text:
+        return HttpResponse(status=400)
+    try:
+        from gtts import gTTS
+        buf = io.BytesIO()
+        gTTS(text=text, lang='ru').write_to_fp(buf)
+        buf.seek(0)
+        return HttpResponse(buf.read(), content_type='audio/mpeg')
+    except Exception as e:
+        print("TTS ERROR:", e)
+        return HttpResponse(status=500)
+
+@csrf_exempt
 def process_command(request):
     text = request.GET.get('text', '').lower().strip()
 
-    # ── greetings ─────────────────────────────────────────────
     if any(w in text for w in ["привет", "здравствуй", "hello", "hi"]):
         hour = datetime.now().hour
         if 5 <= hour < 12:
@@ -88,19 +94,16 @@ def process_command(request):
             greeting = "Доброй ночи!"
         return JsonResponse({"response": f"{greeting} Я ваш голосовой ассистент. Чем могу помочь?"})
 
-    # ── time ──────────────────────────────────────────────────
     elif any(w in text for w in ["время", "который час", "сколько времени", "time"]):
         now = datetime.now().strftime("%H:%M")
         return JsonResponse({"response": f"Сейчас {now}."})
 
-    # ── date ──────────────────────────────────────────────────
     elif any(w in text for w in ["дата", "число", "какой день", "date", "today"]):
         now = datetime.now()
         day  = WEEKDAYS[now.weekday()]
         mon  = MONTHS[now.month - 1]
         return JsonResponse({"response": f"Сегодня {day}, {now.day} {mon} {now.year} года."})
 
-    # ── weather ───────────────────────────────────────────────
     elif any(w in text for w in ["погода", "weather", "температура"]):
         city = "Tashkent"
         for prep in [" в ", " in "]:
@@ -109,7 +112,6 @@ def process_command(request):
                 break
         return JsonResponse({"response": get_weather(city)})
 
-    # ── open website ──────────────────────────────────────────
     elif any(w in text for w in ["открой", "запусти", "перейди", "open"]):
         for name, url in SITES.items():
             if name in text:
@@ -120,7 +122,6 @@ def process_command(request):
                 })
         return JsonResponse({"response": "Не знаю такого сайта."})
 
-    # ── volume ────────────────────────────────────────────────
     elif any(w in text for w in ["громче", "volume up"]):
         return JsonResponse({"response": "Увеличиваю громкость.", "action": "volume_up"})
 
@@ -130,11 +131,9 @@ def process_command(request):
     elif any(w in text for w in ["без звука", "mute"]):
         return JsonResponse({"response": "Включаю режим без звука.", "action": "mute"})
 
-    # ── goodbye ───────────────────────────────────────────────
     elif any(w in text for w in ["пока", "до свидания", "bye", "goodbye"]):
         return JsonResponse({"response": "До свидания! Обращайтесь."})
 
-    # ── AI fallback ───────────────────────────────────────────
     else:
         ai_response = ask_ai(text)
         return JsonResponse({"response": ai_response})

@@ -17,9 +17,6 @@
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -188,9 +185,7 @@
   .va-orb-area.listening ~ .va-waves .bar {
     animation: wave 0.8s ease-in-out infinite;
   }
-  .va-orb-area.listening ~ .va-waves {
-    opacity: 1;
-  }
+  .va-orb-area.listening ~ .va-waves { opacity: 1; }
   .va-waves .bar:nth-child(1) { animation-delay: 0s; }
   .va-waves .bar:nth-child(2) { animation-delay: 0.1s; }
   .va-waves .bar:nth-child(3) { animation-delay: 0.2s; }
@@ -282,16 +277,20 @@
     </button>
   </div>
 </div>
-<script>
-const micBtn = document.getElementById("micBtn");
-const orbArea = document.getElementById("orbArea");
-const statusText = document.getElementById("status");
-const chat = document.getElementById("chat");
-const wavesEl = document.getElementById("waves");
 
-let recognition = null;
-let isListening = false;
-let speechVolume = 1.0;
+<script>
+const micBtn    = document.getElementById("micBtn");
+const orbArea   = document.getElementById("orbArea");
+const statusText = document.getElementById("status");
+const chat      = document.getElementById("chat");
+const wavesEl   = document.getElementById("waves");
+
+let recognition  = null;
+let isListening  = false;
+let currentAudio = null;   // active Audio object for server-side TTS
+let audioVolume  = 1.0;
+
+// ── UI helpers ────────────────────────────────────────────
 
 function addMessage(text, sender) {
   const div = document.createElement("div");
@@ -299,7 +298,6 @@ function addMessage(text, sender) {
   div.innerText = text;
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
-  return div;
 }
 
 function showTyping() {
@@ -316,76 +314,79 @@ function removeTyping() {
   if (t) t.remove();
 }
 
+// ── TTS: server-side gTTS (same voice on every device) ───
+
 function speak(text) {
-    speechSynthesis.cancel();
-
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang   = "ru-RU";
-    u.rate   = 1.0;
-    u.pitch  = 1.0;
-    u.volume = speechVolume;
-
-    // Pick best available Russian voice
-    const voices = speechSynthesis.getVoices();
-    const ruVoice = voices.find(v =>
-        v.lang.startsWith("ru") && v.localService
-    ) || voices.find(v => v.lang.startsWith("ru"));
-    if (ruVoice) u.voice = ruVoice;
-
-    speechSynthesis.speak(u);
+  stopSpeech();   // cancel any playing audio first
+  const audio = new Audio("/tts/?text=" + encodeURIComponent(text));
+  audio.volume = audioVolume;
+  currentAudio = audio;
+  audio.play().catch(err => {
+    console.warn("Audio play failed:", err);
+  });
 }
 
 function stopSpeech() {
-  speechSynthesis.cancel();
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
   statusText.innerText = "Остановлено";
 }
 
-function pauseSpeech() { speechSynthesis.pause(); }
-function resumeSpeech() { speechSynthesis.resume(); }
+function pauseSpeech() {
+  if (currentAudio) currentAudio.pause();
+}
+
+function resumeSpeech() {
+  if (currentAudio) currentAudio.play();
+}
+
+// ── Server request ────────────────────────────────────────
 
 function sendToServer(text) {
-    showTyping();
+  showTyping();
 
-    fetch(`/process/?text=${encodeURIComponent(text)}`)
-        .then(r => r.json())
-        .then(data => {
-            removeTyping();
-            addMessage(data.response, "bot");
-            speak(data.response);
+  fetch("/process/?text=" + encodeURIComponent(text))
+    .then(r => r.json())
+    .then(data => {
+      removeTyping();
+      addMessage(data.response, "bot");
+      speak(data.response);
 
-            switch (data.action) {
-                case "open_url":
-                    window.open(data.url, "_blank");
-                    break;
-
-                case "open_google":
-                    window.open("https://google.com", "_blank");
-                    break;
-
-                case "volume_up":
-                    speechVolume = Math.min(1.0, speechVolume + 0.2);
-                    break;
-
-                case "volume_down":
-                    speechVolume = Math.max(0.1, speechVolume - 0.2);
-                    break;
-
-                case "mute":
-                    speechVolume = 0.0;
-                    speechSynthesis.cancel();
-                    break;
-            }
-        })
-        .catch(() => {
-            removeTyping();
-            addMessage("Ошибка соединения с сервером.", "bot");
-        });
+      switch (data.action) {
+        case "open_url":
+          window.open(data.url, "_blank");
+          break;
+        case "open_google":
+          window.open("https://google.com", "_blank");
+          break;
+        case "volume_up":
+          audioVolume = Math.min(1.0, audioVolume + 0.2);
+          if (currentAudio) currentAudio.volume = audioVolume;
+          break;
+        case "volume_down":
+          audioVolume = Math.max(0.1, audioVolume - 0.2);
+          if (currentAudio) currentAudio.volume = audioVolume;
+          break;
+        case "mute":
+          audioVolume = 0.0;
+          stopSpeech();
+          break;
+      }
+    })
+    .catch(() => {
+      removeTyping();
+      addMessage("Ошибка соединения с сервером.", "bot");
+    });
 }
+
+// ── Speech recognition ────────────────────────────────────
 
 function startListening() {
   if (isListening) return;
 
-  // Check for secure context (HTTPS required for mic on non-localhost)
   if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
     statusText.innerText = "Требуется HTTPS для микрофона";
     addMessage("Ошибка: откройте сайт по HTTPS (https://...)", "bot");
@@ -429,26 +430,23 @@ function startListening() {
     wavesEl.classList.remove("visible");
 
     const errorMessages = {
-      "not-allowed": "Доступ к микрофону запрещён. Разрешите доступ в настройках браузера.",
-      "network": "Ошибка сети при распознавании речи.",
+      "not-allowed":       "Доступ к микрофону запрещён. Разрешите доступ в настройках браузера.",
+      "network":           "Ошибка сети при распознавании речи.",
       "service-not-allowed": "Браузер не поддерживает распознавание речи.",
-      "no-speech": "Речь не обнаружена. Попробуйте снова.",
-      "audio-capture": "Микрофон не найден или недоступен.",
+      "no-speech":         "Речь не обнаружена. Попробуйте снова.",
+      "audio-capture":     "Микрофон не найден или недоступен.",
     };
 
     const msg = errorMessages[event.error] || ("Ошибка: " + event.error);
     statusText.innerText = msg;
-    if (event.error !== "no-speech") {
-      addMessage(msg, "bot");
-    }
+    if (event.error !== "no-speech") addMessage(msg, "bot");
   };
 }
 
 micBtn.addEventListener("click", () => {
-  speechSynthesis.cancel();
+  stopSpeech();
   startListening();
 });
-speechSynthesis.onvoiceschanged = () => { speechSynthesis.getVoices(); };
 </script>
 
 </body>
