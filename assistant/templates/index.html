@@ -344,7 +344,7 @@ function pauseSpeech() { speechSynthesis.pause(); }
 function resumeSpeech() { speechSynthesis.resume(); }
 
 function sendToServer(text) {
-    showTyping();   // show "..." bubble while waiting
+    showTyping();
 
     fetch(`/process/?text=${encodeURIComponent(text)}`)
         .then(r => r.json())
@@ -353,13 +353,12 @@ function sendToServer(text) {
             addMessage(data.response, "bot");
             speak(data.response);
 
-            // ── handle actions ──────────────────────────────────
             switch (data.action) {
                 case "open_url":
                     window.open(data.url, "_blank");
                     break;
 
-                case "open_google":   // keep old action working
+                case "open_google":
                     window.open("https://google.com", "_blank");
                     break;
 
@@ -385,8 +384,21 @@ function sendToServer(text) {
 
 function startListening() {
   if (isListening) return;
+
+  // Check for secure context (HTTPS required for mic on non-localhost)
+  if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+    statusText.innerText = "Требуется HTTPS для микрофона";
+    addMessage("Ошибка: откройте сайт по HTTPS (https://...)", "bot");
+    return;
+  }
+
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { statusText.innerText = "Браузер не поддерживает распознавание"; return; }
+  if (!SR) {
+    statusText.innerText = "Браузер не поддерживает распознавание";
+    addMessage("Ваш браузер не поддерживает Web Speech API. Используйте Chrome или Safari.", "bot");
+    return;
+  }
+
   recognition = new SR();
   recognition.lang = "ru-RU";
   isListening = true;
@@ -410,12 +422,25 @@ function startListening() {
     statusText.innerText = "Нажмите кнопку и говорите";
   };
 
-  recognition.onerror = () => {
+  recognition.onerror = (event) => {
     isListening = false;
     micBtn.classList.remove("active");
     orbArea.classList.remove("listening");
     wavesEl.classList.remove("visible");
-    statusText.innerText = "Ошибка распознавания";
+
+    const errorMessages = {
+      "not-allowed": "Доступ к микрофону запрещён. Разрешите доступ в настройках браузера.",
+      "network": "Ошибка сети при распознавании речи.",
+      "service-not-allowed": "Браузер не поддерживает распознавание речи.",
+      "no-speech": "Речь не обнаружена. Попробуйте снова.",
+      "audio-capture": "Микрофон не найден или недоступен.",
+    };
+
+    const msg = errorMessages[event.error] || ("Ошибка: " + event.error);
+    statusText.innerText = msg;
+    if (event.error !== "no-speech") {
+      addMessage(msg, "bot");
+    }
   };
 }
 

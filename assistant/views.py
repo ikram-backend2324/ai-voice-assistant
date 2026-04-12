@@ -1,6 +1,7 @@
 # assistant/views.py
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime
 import requests
 
@@ -70,6 +71,7 @@ def get_weather(city="Tashkent"):
 def index(request):
     return render(request, 'index.html')
 
+@csrf_exempt
 def process_command(request):
     text = request.GET.get('text', '').lower().strip()
 
@@ -100,7 +102,6 @@ def process_command(request):
 
     # ── weather ───────────────────────────────────────────────
     elif any(w in text for w in ["погода", "weather", "температура"]):
-        # try to extract a city name after "в" / "in"
         city = "Tashkent"
         for prep in [" в ", " in "]:
             if prep in text:
@@ -120,7 +121,6 @@ def process_command(request):
         return JsonResponse({"response": "Не знаю такого сайта."})
 
     # ── volume ────────────────────────────────────────────────
-    # (volume is controlled client-side; backend just signals)
     elif any(w in text for w in ["громче", "volume up"]):
         return JsonResponse({"response": "Увеличиваю громкость.", "action": "volume_up"})
 
